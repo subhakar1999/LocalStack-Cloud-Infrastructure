@@ -1,0 +1,35 @@
+# LocalStack persistent data
+.localstack/
+
+# Terraform state and provider cache
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Lambda build artifacts
+terraform/modules/lambda/dist/
+*.zip
+
+# Environment files with sensitive credentials
+.env
+
+# OS and IDE files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+__pycache__/
+*.pyc
+
+# Node / Dashboard dependencies
+node_modules/
+.npm/
+npm-debug.log*
