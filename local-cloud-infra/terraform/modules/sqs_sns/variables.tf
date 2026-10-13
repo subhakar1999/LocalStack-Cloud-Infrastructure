@@ -3,6 +3,18 @@ variable "topic_name" {
   type        = string
 }
 
+variable "aws_region" {
+  description = "LocalStack region for deterministic policy ARNs"
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "account_id" {
+  description = "Emulated account ID for deterministic policy ARNs"
+  type        = string
+  default     = "000000000000"
+}
+
 variable "queue_name" {
   description = "Name of the primary SQS queue"
   type        = string

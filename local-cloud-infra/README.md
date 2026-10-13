@@ -1,5 +1,19 @@
 # Production-Grade LocalStack Infrastructure
 
+The dashboard now uses AWS-style console navigation, resource tables, and Step
+Functions execution details. Open [Console Home](http://localhost:3000) or the
+[sample order application](http://localhost:3000/#sample). Deploy the sample
+workflow using the instructions in [sample-app/README.md](sample-app/README.md).
+
+The [Policy as Code workflow](../.github/workflows/policy-as-code.yml) runs
+OPA/Conftest and Sentinel checks on Terraform plan JSON and fails CI on violations. PRs only
+plan; pushes apply the same approved plan to ephemeral LocalStack. See
+[Policy as Code](terraform/POLICIES.md) for rules and local commands.
+
+For live checks and versioning remediation across local accounts, including
+resources outside this Terraform project, see
+[LocalStack account governance](governance/README.md).
+
 A modular, fully functional AWS local cloud infrastructure codebase provisioned with **LocalStack Community Edition**, **Terraform (AWS Provider v5.x)**, and **Docker Compose**.
 
 ---
@@ -146,13 +160,14 @@ bash scripts/test-resources.sh
 Once the containers are running with `make up` (or `docker compose up -d`), you can visually inspect and interact with all provisioned resources:
 
 1. **Local Cloud Dashboard (`http://localhost:3000`)**:
-   - **Pipeline Visualizer**: Real-time diagram of SNS &rarr; SQS &rarr; Lambda &rarr; DynamoDB &rarr; S3.
-   - **Simulate Live Event**: One-click button to publish a test event and watch it flow through SQS and Lambda into DynamoDB.
-   - **DynamoDB Records**: Browse, view, search, and delete records written by the Lambda function.
-   - **S3 Bucket Explorer**: Browse files, drag-and-drop file upload, preview sizes, delete objects.
-   - **SQS & SNS Queues/Topics**: View message counts, dead-letter queue (DLQ), send test messages, purge queues.
-   - **Lambda Invoker**: Inspect function runtime, test-invoke with custom JSON payloads, view execution responses.
-   - **Service Health Grid**: Real-time telemetry on LocalStack services.
+   - **Console Home**: AWS-style service navigation and live resource counts.
+   - **Step Functions**: Browse state machines, submit JSON input, and inspect execution status, visited states, input/output, and event history.
+   - **Sample Application**: Validate an order, calculate its total, and save it through three Lambda tasks. Deploy `sample-app` separately first.
+   - **DynamoDB**: Browse tables and inspect stored records.
+   - **S3**: Browse buckets and objects, inspect file sizes, and upload files.
+   - **SQS & SNS**: View queue counts, send messages, and publish to topics.
+   - **Lambda**: Inspect function runtimes and test with custom JSON payloads.
+   - **Service Health**: Read LocalStack service availability.
 
 2. **DynamoDB Admin UI (`http://localhost:8001`)**:
    - Comprehensive web interface dedicated to exploring DynamoDB tables, creating items, and querying primary/sort keys.

@@ -1,0 +1,18 @@
+import "tfplan/v2" as tfplan
+import "strings"
+
+tagged_types = ["aws_s3_bucket", "aws_dynamodb_table", "aws_sns_topic",
+	"aws_sqs_queue", "aws_iam_role", "aws_lambda_function"]
+resources = filter tfplan.resource_changes as _, r {
+	r.mode is "managed" and r.change.after is not null and r.type in tagged_types
+}
+
+main = rule {
+	length(resources) > 0 and
+	all resources as _, r {
+		all ["Project", "Environment", "Name"] as key {
+			strings.trim_space(r.change.after.tags[key] else "") is not ""
+		} and
+			(r.change.after.tags.Environment else "") is tfplan.variables.environment.value
+	}
+}

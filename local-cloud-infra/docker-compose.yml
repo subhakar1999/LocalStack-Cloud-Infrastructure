@@ -6,7 +6,7 @@ services:
       - "4566:4566"            # LocalStack Gateway
       - "4510-4559:4510-4559"  # External services port range
     environment:
-      - SERVICES=${SERVICES:-s3,dynamodb,sqs,sns,lambda,iam}
+      - SERVICES=${SERVICES:-s3,dynamodb,sqs,sns,lambda,iam,stepfunctions,logs}
       - DEBUG=${DEBUG:-0}
       - DOCKER_HOST=${DOCKER_HOST:-unix:///var/run/docker.sock}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}

@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Detect and repair disabled S3 versioning without owning workload buckets.
+
+Parameters:
+  PolicyPrefix:
+    Type: String
+    Default: account-governance
+    AllowedPattern: '[a-z][a-z0-9-]{2,23}'
+  AutomaticRemediation:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+
+Conditions:
+  RemediateAutomatically:
+    Fn::Equals: [{Ref: AutomaticRemediation}, 'true']
+
+Resources:
+  VersioningRemediationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      # IAM is global; regional names avoid collisions across StackSet instances.
+      RoleName:
+        Fn::Sub: '${PolicyPrefix}-s3-versioning-${AWS::Region}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ssm.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: {Ref: 'AWS::AccountId'}
+              ArnLike:
+                aws:SourceArn:
+                  Fn::Sub: 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:automation-execution/*'
+      Policies:
+        - PolicyName: EnableVersioningOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['s3:GetBucketVersioning', 's3:PutBucketVersioning']
+                Resource:
+                  Fn::Sub: 'arn:${AWS::Partition}:s3:::*'
+                Condition:
+                  StringEquals:
+                    s3:ResourceAccount: {Ref: 'AWS::AccountId'}
+
+  S3VersioningRule:
+    Type: AWS::Config::ConfigRule
+    Properties:
+      ConfigRuleName:
+        Fn::Sub: '${PolicyPrefix}-s3-versioning'
+      Description: All recorded S3 buckets must have versioning enabled.
+      Scope:
+        ComplianceResourceTypes: ['AWS::S3::Bucket']
+      Source:
+        Owner: AWS
+        SourceIdentifier: S3_BUCKET_VERSIONING_ENABLED
+
+  EnableS3Versioning:
+    Type: AWS::Config::RemediationConfiguration
+    Properties:
+      ConfigRuleName: {Ref: S3VersioningRule}
+      ResourceType: AWS::S3::Bucket
+      TargetType: SSM_DOCUMENT
+      TargetId: AWS-ConfigureS3BucketVersioning
+      TargetVersion: '1'
+      Automatic:
+        Fn::If: [RemediateAutomatically, true, false]
+      MaximumAutomaticAttempts: 5
+      RetryAttemptSeconds: 60
+      ExecutionControls:
+        SsmControls:
+          ConcurrentExecutionRatePercentage: 10
+          ErrorPercentage: 10
+      Parameters:
+        AutomationAssumeRole:
+          StaticValue:
+            Values:
+              - Fn::GetAtt: [VersioningRemediationRole, Arn]
+        BucketName:
+          ResourceValue:
+            Value: RESOURCE_ID
+        VersioningState:
+          StaticValue:
+            Values: ['Enabled']

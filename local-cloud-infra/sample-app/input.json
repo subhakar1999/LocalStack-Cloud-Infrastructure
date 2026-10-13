@@ -1,0 +1,7 @@
+{
+  "customer": "Demo customer",
+  "items": [
+    { "name": "Notebook", "quantity": 2, "price": 12.5 },
+    { "name": "Pen", "quantity": 3, "price": 2 }
+  ]
+}

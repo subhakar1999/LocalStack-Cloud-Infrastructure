@@ -1,0 +1,107 @@
+name: Policy as Code
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: policy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-policy:
+    name: Terraform policy gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: local-cloud-infra
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: "true"
+      CONFTEST_VERSION: "0.71.1"
+      SENTINEL_VERSION: "0.40.0"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: Install pinned Conftest
+        run: |
+          set -euo pipefail
+          archive="conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          base="https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}"
+          tool_dir="$(mktemp -d)"
+          curl -fsSL --retry 3 "${base}/${archive}" -o "${tool_dir}/${archive}"
+          curl -fsSL --retry 3 "${base}/checksums.txt" -o "${tool_dir}/checksums.txt"
+          (cd "${tool_dir}" && grep -E "[ *]${archive}$" checksums.txt | sha256sum --check --strict)
+          tar -xzf "${tool_dir}/${archive}" -C "${tool_dir}" conftest
+          sudo install "${tool_dir}/conftest" /usr/local/bin/conftest
+          conftest --version
+
+      - name: Test policy rules
+        run: conftest verify --policy policy --data policy/tests --rego-version v1
+
+      - name: Install pinned Sentinel
+        run: |
+          set -euo pipefail
+          archive="sentinel_${SENTINEL_VERSION}_linux_amd64.zip"
+          base="https://releases.hashicorp.com/sentinel/${SENTINEL_VERSION}"
+          tool_dir="$(mktemp -d)"
+          curl -fsSL --retry 3 "${base}/${archive}" -o "${tool_dir}/${archive}"
+          curl -fsSL --retry 3 "${base}/sentinel_${SENTINEL_VERSION}_SHA256SUMS" -o "${tool_dir}/checksums.txt"
+          (cd "${tool_dir}" && grep -E "[ *]${archive}$" checksums.txt | sha256sum --check --strict)
+          unzip -q "${tool_dir}/${archive}" -d "${tool_dir}"
+          sudo install "${tool_dir}/sentinel" /usr/local/bin/sentinel
+          sentinel version
+
+      - name: Test Sentinel allow and deny outcomes
+        run: node scripts/test-sentinel-gate.cjs
+
+      - name: Prove a policy violation fails the gate
+        run: node scripts/test-policy-gate.cjs
+
+      - name: Start LocalStack for planning
+        run: |
+          docker compose up -d localstack
+          bash scripts/wait-for-localstack.sh
+
+      - name: Initialize and validate Terraform
+        run: |
+          terraform -chdir=terraform init -input=false -lockfile=readonly
+          terraform -chdir=terraform fmt -check -recursive
+          terraform -chdir=terraform validate
+          terraform -chdir=terraform test
+
+      - name: Generate plan and enforce policies
+        # A Conftest violation exits nonzero and fails this job. No override or
+        # continue-on-error is used. PRs never apply infrastructure.
+        run: bash scripts/check-policies.sh
+
+      - name: Apply the approved plan to LocalStack
+        # Only repository pushes deploy; forks and PRs remain plan-only.
+        if: github.event_name == 'push'
+        run: terraform -chdir=terraform apply -input=false policy.tfplan
+
+      - name: LocalStack diagnostics on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=100 localstack
+
+      - name: Stop LocalStack
+        if: always()
+        run: docker compose down

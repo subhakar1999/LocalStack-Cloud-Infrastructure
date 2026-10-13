@@ -1,0 +1,7 @@
+# Replace with your real governance account, target OUs and bucket Regions.
+governance_account_id = "111111111111"
+target_ou_ids        = ["ou-abcd-12345678"]
+target_regions       = ["us-east-1", "eu-west-1"]
+control_region       = "us-east-1"
+call_as              = "SELF"
+automatic_remediation = true

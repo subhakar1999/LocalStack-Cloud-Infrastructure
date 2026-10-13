@@ -39,3 +39,12 @@ Thumbs.db
 __pycache__/
 *.pyc
 
+# Local policy tooling and Terraform plan artifacts
+.tools/
+.sentinel/
+**/.sentinel/
+*.tfplan
+*.tfplan.json
+policy-test-events.jsonl
+account-governance/terraform/deployment.tfvars
+

@@ -10,6 +10,7 @@ const { DynamoDBDocumentClient, ScanCommand, PutCommand, DeleteCommand } = requi
 const { SQSClient, ListQueuesCommand, GetQueueAttributesCommand, SendMessageCommand, PurgeQueueCommand } = require('@aws-sdk/client-sqs');
 const { SNSClient, ListTopicsCommand, PublishCommand } = require('@aws-sdk/client-sns');
 const { LambdaClient, ListFunctionsCommand, InvokeCommand } = require('@aws-sdk/client-lambda');
+const { SFNClient, ListStateMachinesCommand, DescribeStateMachineCommand, ListExecutionsCommand, StartExecutionCommand, DescribeExecutionCommand, GetExecutionHistoryCommand } = require('@aws-sdk/client-sfn');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,6 +40,7 @@ const ddbDocClient = DynamoDBDocumentClient.from(rawDdbClient);
 const sqsClient = new SQSClient(awsConfig);
 const snsClient = new SNSClient(awsConfig);
 const lambdaClient = new LambdaClient(awsConfig);
+const sfnClient = new SFNClient(awsConfig);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -436,6 +438,33 @@ app.post('/api/pipeline/simulate', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// Step Functions resource and execution APIs.
+const route = (handler) => async (req, res) => {
+  try { res.json(await handler(req)); }
+  catch (err) { res.status(err.name === 'ValidationException' || err instanceof SyntaxError ? 400 : 500).json({ error: err.message }); }
+};
+app.get('/api/stepfunctions/machines', route(async () => {
+  const result = await sfnClient.send(new ListStateMachinesCommand({}));
+  return result.stateMachines || [];
+}));
+app.get('/api/stepfunctions/machine', route(req => sfnClient.send(new DescribeStateMachineCommand({ stateMachineArn: req.query.arn }))));
+app.get('/api/stepfunctions/executions', route(async req => {
+  const result = await sfnClient.send(new ListExecutionsCommand({ stateMachineArn: req.query.arn, maxResults: 50 }));
+  return result.executions || [];
+}));
+app.post('/api/stepfunctions/start', route(req => {
+  const input = typeof req.body.input === 'string' ? req.body.input : JSON.stringify(req.body.input ?? {});
+  JSON.parse(input);
+  return sfnClient.send(new StartExecutionCommand({ stateMachineArn: req.body.stateMachineArn, input }));
+}));
+app.get('/api/stepfunctions/execution', route(async req => {
+  const [execution, history] = await Promise.all([
+    sfnClient.send(new DescribeExecutionCommand({ executionArn: req.query.arn })),
+    sfnClient.send(new GetExecutionHistoryCommand({ executionArn: req.query.arn, maxResults: 1000 }))
+  ]);
+  return { ...execution, events: history.events || [], historyTruncated: Boolean(history.nextToken) };
+}));
 
 // Start Server
 app.listen(PORT, '0.0.0.0', () => {

@@ -1,0 +1,45 @@
+import "tfplan/v2" as tfplan
+
+resources = filter tfplan.resource_changes as _, r {
+	r.mode is "managed" and r.change.after is not null
+}
+buckets = filter resources as _, r { r.type is "aws_s3_bucket" }
+protection_types = ["aws_s3_bucket_public_access_block",
+	"aws_s3_bucket_ownership_controls", "aws_s3_bucket_versioning",
+	"aws_s3_bucket_server_side_encryption_configuration"]
+
+protected = func(bucket, kind) {
+	companions = filter resources as _, r {
+		r.type is kind and
+			(r.module_address else "") is (bucket.module_address else "") and
+			(r.change.after.bucket else null) is bucket.change.after.bucket
+	}
+	if length(companions) is not 1 {
+		return false
+	}
+	for companions as _, r {
+		v = r.change.after
+		if kind is "aws_s3_bucket_public_access_block" {
+			return (v.block_public_acls else false) and (v.block_public_policy else false) and
+				(v.ignore_public_acls else false) and
+				(v.restrict_public_buckets else false)
+		}
+		if kind is "aws_s3_bucket_ownership_controls" {
+			return (v["rule"][0].object_ownership else "") is "BucketOwnerEnforced"
+		}
+		if kind is "aws_s3_bucket_versioning" {
+			return (v.versioning_configuration[0].status else "") is "Enabled"
+		}
+		return length(v["rule"] else []) > 0 and all v["rule"] as encryption {
+			(encryption.apply_server_side_encryption_by_default[0].sse_algorithm else "") in ["AES256", "aws:kms"]
+		}
+	}
+	return false
+}
+
+main = rule {
+	length(buckets) > 0 and
+	all buckets as _, bucket {
+		all protection_types as kind { protected(bucket, kind) }
+	}
+}

@@ -4,6 +4,17 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
+variable "localstack_account_id" {
+  description = "Emulated account ID used to build policy ARNs before resources exist"
+  type        = string
+  default     = "000000000000"
+
+  validation {
+    condition     = can(regex("^[0-9]{12}$", var.localstack_account_id))
+    error_message = "LocalStack account ID must contain exactly 12 digits."
+  }
+}
+
 variable "aws_access_key" {
   description = "AWS access key mock credential for LocalStack"
   type        = string

@@ -1,5 +1,10 @@
 # LocalStack Cloud Infrastructure
 
+For policy checks and remediation across simulated accounts, including manually
+created resources, see [LocalStack account governance](local-cloud-infra/governance/README.md).
+The separate [real-AWS governance reference](account-governance/README.md) is for
+future use and is not deployed by the local workflow.
+
 This repository contains a production-grade local cloud infrastructure setup based on **LocalStack Community Edition**, **Terraform (AWS Provider v5.x)**, and **Docker Compose**.
 
 ## Getting Started

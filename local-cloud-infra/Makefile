@@ -7,7 +7,7 @@ ifneq (,$(wildcard $(ENV_FILE)))
     export
 endif
 
-.PHONY: help up wait init plan apply test destroy down clean restart logs ui dashboard
+.PHONY: help up wait init plan apply test destroy down clean restart logs ui dashboard policy policy-test apply-approved governance-check governance-remediate governance-watch governance-test sentinel-test sentinel-check
 
 help:
 	@echo "================================================================="
@@ -18,6 +18,15 @@ help:
 	@echo "  make wait      - Wait until LocalStack healthcheck returns HTTP 200"
 	@echo "  make init      - Initialize Terraform working directory and providers"
 	@echo "  make plan      - Generate Terraform execution plan"
+	@echo "  make policy    - Generate a plan and enforce OPA and Sentinel policies"
+	@echo "  make sentinel-test - Verify Sentinel allow and deny outcomes"
+	@echo "  make sentinel-check - Run Sentinel on the exported saved plan"
+	@echo "  make policy-test - Run Rego tests and verify gate exit codes"
+	@echo "  make apply-approved - Check policies and apply that saved plan"
+	@echo "  make governance-check - Check all S3 buckets in configured local accounts"
+	@echo "  make governance-remediate - Enable versioning on violating local buckets"
+	@echo "  make governance-watch - Recheck and repair local buckets every 30 seconds"
+	@echo "  make governance-test - Test real LocalStack detection and remediation"
 	@echo "  make apply     - Provision infrastructure on LocalStack"
 	@echo "  make test      - Run integration tests (S3, SNS, SQS, Lambda, DynamoDB)"
 	@echo "  make ui        - Display UI URLs and start local dashboard if needed"
@@ -55,6 +64,37 @@ plan:
 apply:
 	@echo "[INFO] Applying Terraform configuration..."
 	terraform -chdir=terraform apply -auto-approve
+
+policy:
+	bash scripts/check-policies.sh
+
+policy-test:
+	conftest verify --policy policy --data policy/tests --rego-version v1
+	node scripts/test-policy-gate.cjs
+	node scripts/test-sentinel-gate.cjs
+
+sentinel-test:
+	node scripts/test-sentinel-gate.cjs
+
+sentinel-check:
+	node scripts/check-sentinel.cjs
+
+apply-approved: policy
+	terraform -chdir=terraform apply -input=false policy.tfplan
+
+governance-check:
+	node scripts/localstack-governance.cjs --check
+
+governance-remediate:
+	node scripts/localstack-governance.cjs --remediate
+
+governance-watch:
+	node scripts/localstack-governance.cjs --remediate --watch 30
+
+governance-test:
+	conftest verify --policy policy/live --rego-version v1
+	node --test scripts/localstack-governance.test.cjs
+	node scripts/test-localstack-governance.cjs
 
 test:
 	@echo "[INFO] Executing integration test suite against LocalStack..."

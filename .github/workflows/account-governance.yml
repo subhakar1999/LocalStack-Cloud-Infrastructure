@@ -1,0 +1,78 @@
+name: AWS Account Governance
+
+on:
+  pull_request:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-governance:
+    name: Account governance policy gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+        working-directory: account-governance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+      - name: Test the governance policy and remediation safeguards
+        run: |
+          docker run --rm -v "${PWD}:/project" openpolicyagent/conftest:v0.71.1 verify --policy policy --rego-version v1
+          docker run --rm -v "${PWD}:/project" openpolicyagent/conftest:v0.71.1 test templates/s3-versioning.yaml --policy policy --rego-version v1
+      - name: Validate organization deployment with mocked AWS
+        run: |
+          terraform -chdir=terraform init -backend=false -input=false -lockfile=readonly
+          terraform -chdir=terraform fmt -check -recursive
+          terraform -chdir=terraform validate
+          terraform -chdir=terraform test
+      - name: Test audit failure behavior
+        run: node --test scripts/audit-compliance.test.cjs
+      # This workflow deliberately validates without AWS credentials. Deploying
+      # real governance requires your OU/Region inputs and reviewed saved plan.
+
+  localstack-governance:
+    name: LocalStack account governance gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: local-cloud-infra
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install policy runner
+        run: |
+          set -euo pipefail
+          version=0.71.1
+          archive="conftest_${version}_Linux_x86_64.tar.gz"
+          base="https://github.com/open-policy-agent/conftest/releases/download/v${version}"
+          tool_dir="$(mktemp -d)"
+          curl -fsSL --retry 3 "${base}/${archive}" -o "${tool_dir}/${archive}"
+          curl -fsSL --retry 3 "${base}/checksums.txt" -o "${tool_dir}/checksums.txt"
+          (cd "${tool_dir}" && grep -E "[ *]${archive}$" checksums.txt | sha256sum --check --strict)
+          tar -xzf "${tool_dir}/${archive}" -C "${tool_dir}" conftest
+          sudo install "${tool_dir}/conftest" /usr/local/bin/conftest
+          aws --version
+      - name: Test account-wide policy behavior
+        run: |
+          conftest verify --policy policy/live --rego-version v1
+          node --test scripts/localstack-governance.test.cjs
+      - name: Start LocalStack
+        run: |
+          docker compose up -d localstack
+          bash scripts/wait-for-localstack.sh
+      - name: Verify multi-account failure, remediation and future-resource coverage
+        run: node scripts/test-localstack-governance.cjs
+      - name: Fail on remaining local-account policy violations
+        run: node scripts/localstack-governance.cjs --check
+      - name: Stop LocalStack
+        if: always()
+        run: docker compose down

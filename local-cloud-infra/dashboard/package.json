@@ -10,6 +10,7 @@
     "@aws-sdk/client-dynamodb": "^3.750.0",
     "@aws-sdk/client-lambda": "^3.750.0",
     "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/client-sfn": "^3.1150.0",
     "@aws-sdk/client-sns": "^3.750.0",
     "@aws-sdk/client-sqs": "^3.750.0",
     "@aws-sdk/lib-dynamodb": "^3.750.0",
@@ -18,4 +19,3 @@
     "multer": "^1.4.5-lts.1"
   }
 }
-

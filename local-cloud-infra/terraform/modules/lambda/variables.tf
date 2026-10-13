@@ -3,6 +3,12 @@ variable "function_name" {
   type        = string
 }
 
+variable "account_id" {
+  description = "Emulated account ID used to make IAM references known in plans"
+  type        = string
+  default     = "000000000000"
+}
+
 variable "dynamodb_table_name" {
   description = "Name of target DynamoDB table"
   type        = string
